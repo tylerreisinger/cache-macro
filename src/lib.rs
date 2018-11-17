@@ -77,7 +77,6 @@
 #![recursion_limit="128"]
 extern crate proc_macro;
 
-use std::sync::Mutex;
 use proc_macro::TokenStream;
 use syn;
 use syn::{Token, parse_quote};
