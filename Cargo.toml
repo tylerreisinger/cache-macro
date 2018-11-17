@@ -1,12 +1,15 @@
 [package]
-name = "lru_cache_macros"
+name = "lru-cache-macros"
 version = "0.1.0"
 authors = ["Tyler Reisinger <reisinger.tyler@gmail.com>"]
 edition = "2018"
+categories = ["caching"]
+keywords = ["lru", "procedural-macro", "cache"]
+license = "MIT"
+description = "A procedural macro for automatically caching the output of functions."
 
 [dependencies]
 quote = "0.6"
-lru_cache = {path = "/home/tyler/programming/projects/rust/lru_cache"}
 
 [dependencies.proc-macro2]
 version = "0.4"
@@ -14,7 +17,7 @@ features = ["nightly"]
 
 [dependencies.syn]
 version = "0.15"
-features = ["full", "extra-traits"]
+features = ["full"]
 
 [lib]
 proc-macro = true
