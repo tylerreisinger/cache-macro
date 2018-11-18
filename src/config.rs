@@ -27,8 +27,12 @@ enum ConfigAttrib {
 }
 
 impl Config {
-    pub fn parse_from_attributes(attribs: &[syn::Attribute]) -> Result<Config> {
+    // Parse any additional attributes present after `lru_cache` and return a configuration object
+    // created from their contents. Additionally, return any attributes that were not handled here.
+    pub fn parse_from_attributes(attribs: &[syn::Attribute]) -> Result<(Config, Vec<syn::Attribute>)> {
         let mut parsed_attributes = Vec::new();
+        let mut remaining_attributes = Vec::new();
+
         for attrib in attribs {
             let segs = &attrib.path.segments;
             if segs.len() > 0 {
@@ -44,6 +48,9 @@ impl Config {
                         }
                     }
                 }
+                else {
+                    remaining_attributes.push(attrib.clone());
+                }
             }
         }
 
@@ -56,7 +63,7 @@ impl Config {
             }
         }
 
-        Ok(config)
+        Ok((config, remaining_attributes))
     }
 }
 

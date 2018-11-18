@@ -137,6 +137,7 @@ mod error;
 
 use self::error::{DiagnosticError, Result};
 
+// Function shim to allow us to use `Result` and the `?` operator.
 #[proc_macro_attribute]
 pub fn lru_cache(attr: TokenStream, item: TokenStream) -> TokenStream {
     match lru_cache_impl(attr, item.clone()) {
@@ -148,6 +149,7 @@ pub fn lru_cache(attr: TokenStream, item: TokenStream) -> TokenStream {
     }
 }
 
+// The main entry point for the macro.
 fn lru_cache_impl(attr: TokenStream, item: TokenStream) -> Result<TokenStream> {
     let mut original_fn: syn::ItemFn = match syn::parse(item.clone()) {
         Ok(ast) => ast,
@@ -158,33 +160,23 @@ fn lru_cache_impl(attr: TokenStream, item: TokenStream) -> Result<TokenStream> {
         }
     };
 
-    let macro_config;
-    {
-        let attribs = &original_fn.attrs[..];
-        macro_config = config::Config::parse_from_attributes(attribs)?;
-    }
-    original_fn.attrs = Vec::new();
+    let (macro_config, out_attributes) =
+        {
+            let attribs = &original_fn.attrs[..];
+            config::Config::parse_from_attributes(attribs)?
+        };
+    original_fn.attrs = out_attributes;
 
     let mut new_fn = original_fn.clone();
 
     let cache_size = get_lru_size(attr)?;
-
-    let return_type =
-        if let syn::ReturnType::Type(_, ref ty) = original_fn.decl.output {
-            Some(ty.clone())
-        } else {
-            let diag = original_fn.ident.span().unstable()
-                .error("There's no point of caching the output of a function that has no output");
-            return Err(DiagnosticError::new(diag));
-        };
+    let return_type = get_cache_fn_return_type(&original_fn)?;
 
     let new_name = format!("__lru_base_{}", original_fn.ident.to_string());
     original_fn.ident = syn::Ident::new(&new_name[..], original_fn.ident.span());
 
     let (call_args, types, cache_args) = get_args_and_types(&original_fn, &macro_config)?;
-
     let cloned_args = make_cloned_args_tuple(&cache_args);
-
     let fn_path = path_from_ident(original_fn.ident.clone());
 
     let fn_call = syn::ExprCall {
@@ -228,12 +220,23 @@ fn lru_cache_impl(attr: TokenStream, item: TokenStream) -> Result<TokenStream> {
     };
 
     new_fn.block = Box::new(lru_body);
+
     let out = quote! {
         #original_fn
 
         #new_fn
     };
     Ok(out.into())
+}
+
+fn get_cache_fn_return_type(original_fn: &syn::ItemFn) -> Result<Box<syn::Type>> {
+    if let syn::ReturnType::Type(_, ref ty) = original_fn.decl.output {
+        Ok(ty.clone())
+    } else {
+        let diag = original_fn.ident.span().unstable()
+            .error("There's no point of caching the output of a function that has no output");
+        return Err(DiagnosticError::new(diag));
+    }
 }
 
 fn path_from_ident(ident: syn::Ident) -> syn::Expr {
