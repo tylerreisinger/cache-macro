@@ -94,7 +94,7 @@ fn make_path_from_segments(segments: &[&str], has_leading_colon: bool, span: pro
 impl Parse for ConfigAttrib {
     fn parse(input: ParseStream) -> syn::parse::Result<Self> {
         let content;
-        let paren = parenthesized!(content in input);
+        let _paren = parenthesized!(content in input);
         let name = content.parse::<syn::Ident>()?;
 
         match &name.to_string()[..] {

@@ -325,8 +325,6 @@ fn get_args_and_types(f: &syn::ItemFn, config: &config::Config) ->
                     }
 
                     cache_args.push(arg_path.clone());
-                } else {
-                    println!("Ignoring {:?}", arg_name);
                 }
 
 
