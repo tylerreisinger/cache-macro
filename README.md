@@ -69,7 +69,7 @@ fn fib(x: u32) -> u64 {
             let cloned_args = (x.clone(),);
             let stored_result = cache_ref.get_mut(&cloned_args);
             if let Some(stored_result) = stored_result {
-                *stored_result
+                stored_result.clone()
             } else {
                 let ret = __lru_base_fib(x);
                 cache_ref.insert(cloned_args, ret);
