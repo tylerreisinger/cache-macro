@@ -58,10 +58,10 @@ fn fib(x: u32) -> u64 {
     use std::cell::UnsafeCell;
     use std::thread_local;
 
-    thread_local!(
-         static cache: UnsafeCell<::lru_cache::LruCache<#tuple_type, #return_type>> =
-             UnsafeCell::new(::lru_cache::LruCache::new(#cache_size));
-    );
+     thread_local!(
+          static cache: UnsafeCell<::lru_cache::LruCache<(u32,), u64>> =
+              UnsafeCell::new(::lru_cache::LruCache::new(20usize));
+     );
 
     cache.with(|c|
         {
