@@ -82,6 +82,7 @@
 #![recursion_limit="128"]
 extern crate proc_macro;
 
+use std::result;
 
 use proc_macro::TokenStream;
 use syn;
@@ -91,40 +92,49 @@ use syn::punctuated::Punctuated;
 use quote::quote;
 use proc_macro2;
 
+mod error;
+use self::error::DiagnosticError;
+
+type Result<T> = result::Result<T, DiagnosticError>;
+
 #[proc_macro_attribute]
 pub fn lru_cache(attr: TokenStream, item: TokenStream) -> TokenStream {
-    let mut original_fn: syn::ItemFn = syn::parse(item.clone()).unwrap();
+    match lru_cache_impl(attr, item.clone()) {
+        Ok(tokens) => return tokens,
+        Err(e) => {
+            e.emit();
+            return item;
+        }
+    }
+}
+
+fn lru_cache_impl(attr: TokenStream, item: TokenStream) -> Result<TokenStream> {
+    let mut original_fn: syn::ItemFn = match syn::parse(item.clone()) {
+        Ok(ast) => ast,
+        Err(e) => {
+            let diag = proc_macro2::Span::call_site().unstable()
+                .error("lru_cache may only be used on functions");
+            return Err(DiagnosticError::new_with_syn_error(diag, e));
+        }
+    };
+
     let mut new_fn = original_fn.clone();
 
-    let cache_size = get_lru_size(attr);
-    if cache_size.is_none() {
-        return item;
-    }
-    let cache_size = cache_size.unwrap();
+    let cache_size = get_lru_size(attr)?;
 
     let return_type =
         if let syn::ReturnType::Type(_, ref ty) = original_fn.decl.output {
             Some(ty.clone())
         } else {
-
-            original_fn.ident.span().unstable()
-                .error("There's no point of caching the output of a function that has no output")
-                .emit();
-            return item;
+            let diag = original_fn.ident.span().unstable()
+                .error("There's no point of caching the output of a function that has no output");
+            return Err(DiagnosticError::new(diag));
         };
 
     let new_name = format!("__lru_base_{}", original_fn.ident.to_string());
     original_fn.ident = syn::Ident::new(&new_name[..], original_fn.ident.span());
 
-    let result = get_args_and_types(&original_fn);
-    let call_args;
-    let types;
-    if let Some((args_inner, types_inner)) = result {
-        call_args = args_inner;
-        types = types_inner;
-    } else {
-        return item;
-    }
+    let (call_args, types) = get_args_and_types(&original_fn)?;
 
     let cloned_args = make_cloned_args_tuple(&call_args);
 
@@ -174,7 +184,7 @@ pub fn lru_cache(attr: TokenStream, item: TokenStream) -> TokenStream {
 
         #new_fn
     };
-    out.into()
+    Ok(out.into())
 }
 
 fn path_from_ident(ident: syn::Ident) -> syn::Expr {
@@ -183,16 +193,15 @@ fn path_from_ident(ident: syn::Ident) -> syn::Expr {
     syn::Expr::Path(syn::ExprPath { attrs: Vec::new(), qself: None, path: syn::Path { leading_colon: None, segments: segments} })
 }
 
-fn get_lru_size(attr: TokenStream) -> Option<usize> {
-    let value: Result<syn::LitInt, _> = syn::parse(attr.clone());
+fn get_lru_size(attr: TokenStream) -> Result<usize> {
+    let value: result::Result<syn::LitInt, _> = syn::parse(attr.clone());
 
     if let Ok(val) = value {
-        Some(val.value() as usize)
+        Ok(val.value() as usize)
     } else {
-        proc_macro2::Span::call_site().unstable()
-            .error("The lru_cache macro must specify a maximum cache size as an argument")
-            .emit();
-        None
+        let diag = proc_macro2::Span::call_site().unstable()
+            .error("The lru_cache macro must specify a maximum cache size as an argument");
+        Err(DiagnosticError::new_with_syn_error(diag, value.err().unwrap()))
     }
 }
 
@@ -217,31 +226,28 @@ fn make_cloned_args_tuple(args: &Punctuated<syn::Expr, Token![,]>) -> syn::ExprT
     }
 }
 
-fn get_args_and_types(f: &syn::ItemFn) -> Option<(Punctuated<syn::Expr, Token![,]>, Punctuated<syn::Type, Token![,]>)> {
+fn get_args_and_types(f: &syn::ItemFn) -> Result<(Punctuated<syn::Expr, Token![,]>, Punctuated<syn::Type, Token![,]>)> {
     let mut call_args = Punctuated::<_, Token![,]>::new();
     let mut types = Punctuated::<_, Token![,]>::new();
     for input in &f.decl.inputs {
         match input {
             syn::FnArg::SelfValue(p) => {
-                p.span().unstable()
-                    .error("`self` arguments are currently unsupported by lru_cache")
-                    .emit();
-                return None;
+                let diag = p.span().unstable()
+                    .error("`self` arguments are currently unsupported by lru_cache");
+                return Err(DiagnosticError::new(diag));
             }
             syn::FnArg::SelfRef(p) => {
-                p.span().unstable()
-                    .error("`&self` arguments are currently unsupported by lru_cache")
-                    .emit();
-                return None;
+                let diag = p.span().unstable()
+                    .error("`&self` arguments are currently unsupported by lru_cache");
+                return Err(DiagnosticError::new(diag));
             }
             syn::FnArg::Captured(arg_captured) => {
                 let mut segments: syn::punctuated::Punctuated<_, Token![::]> = syn::punctuated::Punctuated::new();
                 if let syn::Pat::Ident(ref pat_ident) = arg_captured.pat {
                     if let Some(m) = pat_ident.mutability {
-                        m.span.unstable()
-                            .error("`mut` arguments are not supported with lru_cache as this could lead to incorrect results being stored")
-                            .emit();
-                        return None;
+                        let diag = m.span.unstable()
+                            .error("`mut` arguments are not supported with lru_cache as this could lead to incorrect results being stored");
+                        return Err(DiagnosticError::new(diag));
                     }
                     segments.push(syn::PathSegment { ident: pat_ident.ident.clone(), arguments: syn::PathArguments::None });
                 }
@@ -256,16 +262,14 @@ fn get_args_and_types(f: &syn::ItemFn) -> Option<(Punctuated<syn::Expr, Token![,
                 call_args.push(syn::Expr::Path(syn::ExprPath { attrs: Vec::new(), qself: None, path: syn::Path { leading_colon: None, segments } }));
             },
             syn::FnArg::Inferred(p) => {
-                p.span().unstable()
-                    .error("inferred arguments are currently unsupported by lru_cache")
-                    .emit();
-                return None;
+                let diag = p.span().unstable()
+                    .error("inferred arguments are currently unsupported by lru_cache");
+                return Err(DiagnosticError::new(diag));
             }
             syn::FnArg::Ignored(p) => {
-                p.span().unstable()
-                    .error("ignored arguments are currently unsupported by lru_cache")
-                    .emit();
-                return None;
+                let diag = p.span().unstable()
+                    .error("ignored arguments are currently unsupported by lru_cache");
+                return Err(DiagnosticError::new(diag));
             }
         }
     }
@@ -274,5 +278,5 @@ fn get_args_and_types(f: &syn::ItemFn) -> Option<(Punctuated<syn::Expr, Token![,
         types.push_punct(syn::token::Comma { spans: [proc_macro2::Span::call_site(); 1] })
     }
 
-    Some((call_args, types))
+    Ok((call_args, types))
 }
