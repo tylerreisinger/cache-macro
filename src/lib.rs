@@ -77,6 +77,7 @@
 #![recursion_limit="128"]
 extern crate proc_macro;
 
+
 use proc_macro::TokenStream;
 use syn;
 use syn::{Token, parse_quote};
@@ -138,23 +139,27 @@ pub fn lru_cache(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let lru_body: syn::Block = parse_quote! {
         {
-            static mut cache: Option<::lru_cache::LruCache<#tuple_type, #return_type>> = None;
-            unsafe {
-                if cache.is_none() {
-                    cache = Some(::lru_cache::LruCache::new(#cache_size));
-                }
-            }
-            let mut cache_ref = unsafe { cache.as_mut().unwrap() };
-            let cloned_args = #cloned_args;
+            use std::cell::UnsafeCell;
+            use std::thread_local;
+            thread_local!(
+                // We use `UnsafeCell` here to allow recursion. Since it is in the TLS, it should
+                // not introduce any actual unsafety.
+                static cache: UnsafeCell<::lru_cache::LruCache<#tuple_type, #return_type>> =
+                    UnsafeCell::new(::lru_cache::LruCache::new(#cache_size));
+            );
+            cache.with(|c| {
+                let mut cache_ref = unsafe { &mut *c.get() };
+                let cloned_args = #cloned_args;
 
-            let stored_result = cache_ref.get_mut(&cloned_args);
-            if let Some(stored_result) = stored_result {
-                *stored_result
-            } else {
-                let ret = #fn_call;
-                cache_ref.insert(cloned_args, ret);
-                ret
-            }
+                let stored_result = cache_ref.get_mut(&cloned_args);
+                if let Some(stored_result) = stored_result {
+                    *stored_result
+                } else {
+                    let ret = #fn_call;
+                    cache_ref.insert(cloned_args, ret);
+                    ret
+                }
+            })
         }
     };
 
