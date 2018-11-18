@@ -1,6 +1,6 @@
 [package]
 name = "lru-cache-macros"
-version = "0.2.1"
+version = "0.2.2"
 authors = ["Tyler Reisinger <reisinger.tyler@gmail.com>"]
 edition = "2018"
 repository = "https://github.com/tylerreisinger/lru-cache-macro"
@@ -30,4 +30,4 @@ lru-cache = "0.1.1"
 proc-macro = true
 
 [badges]
-travis-ci = { repository = "https://github.com/tylerreisinger/lru-cache-macro", branch = "master" }
+travis-ci = { repository = "tylerreisinger/lru-cache-macro", branch = "master" }
