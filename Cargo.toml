@@ -1,8 +1,11 @@
 [package]
 name = "lru-cache-macros"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Tyler Reisinger <reisinger.tyler@gmail.com>"]
 edition = "2018"
+repository = "https://github.com/tylerreisinger/lru-cache-macro"
+homepage = "https://github.com/tylerreisinger/lru-cache-macro"
+readme = "README.md"
 categories = ["caching"]
 keywords = ["lru", "procedural-macro", "cache"]
 license = "MIT"

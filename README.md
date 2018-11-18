@@ -41,7 +41,13 @@ The macro will use the LruCache at `::lru_cache::LruCache`. This may be made con
 The `LruCache` type used must accept two generic parameters `<Args, Return>` and must support methods
 `get_mut(&K)` and `insert(K, V)`. The `lru-cache` crate meets these requirements.
 
+Currently, this crate only works on nightly rust. However, once the 2018 edition stabilizes as well as the
+procedural macro diagnostic interface, it should be able to run on stable.
+
 # Details
+
+The created cache resides in thread-local storage so that multiple threads may simultaneously call
+the decorated function, but will not share cached results with each other.
 
 The above example will generate the following code:
 
@@ -50,23 +56,27 @@ fn __lru_base_fib(x: u32) -> u64 {
     if x <= 1 { 1 } else { fib(x - 1) + fib(x - 2) }
 }
 fn fib(x: u32) -> u64 {
-    static mut cache: Option<::lru_cache::LruCache<(u32,), u64>> = None;
-    unsafe {
-        if cache.is_none() {
-            cache = Some(::lru_cache::LruCache::new(20usize));
-        }
-    }
-    let mut cache_ref = unsafe { cache.as_mut().unwrap() };
-    let cloned_args = (x.clone(),);
-    let stored_result = cache_ref.get_mut(&cloned_args);
-    if let Some(stored_result) = stored_result {
-        *stored_result
-    } else {
-        let ret = __lru_base_fib(x);
-        cache_ref.insert(cloned_args, ret);
-        ret
-    }
+    use std::cell::UnsafeCell;
+    use std::thread_local;
+
+    thread_local!(
+         static cache: UnsafeCell<::lru_cache::LruCache<#tuple_type, #return_type>> =
+             UnsafeCell::new(::lru_cache::LruCache::new(#cache_size));
+    );
+
+    cache.with(|c|
+        {
+            let mut cache_ref = unsafe { &mut *c.get() };
+            let cloned_args = (x.clone(),);
+            let stored_result = cache_ref.get_mut(&cloned_args);
+            if let Some(stored_result) = stored_result {
+                *stored_result
+            } else {
+                let ret = __lru_base_fib(x);
+                cache_ref.insert(cloned_args, ret);
+                ret
+            }
+        })
 }
 ```
 
-Note that the current implementation is not thread safe. A mutex may be supported in the future.
