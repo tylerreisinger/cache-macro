@@ -18,10 +18,7 @@
 //!     }
 //! }
 //!
-//! #[test]
-//! fn test_fib() {
-//!     assert_eq!(fib(19), 6765);
-//! }
+//! assert_eq!(fib(19), 6765);
 //! ```
 //!
 //! The above example only calls `fib` twenty times, with the values from 0 to 19. All intermediate
@@ -34,7 +31,6 @@
 //!
 //! * All arguments and return values must implement `Clone`.
 //! * The function may not take `self` in any form.
-//! * Reference arguments are not supported.
 //!
 //! The macro will use the LruCache at `::lru_cache::LruCache`. This may be made configurable in the future.
 //!
@@ -224,18 +220,25 @@ fn get_args_and_types(f: &syn::ItemFn) -> Option<(Punctuated<syn::Expr, Token![,
                     .emit();
                 return None;
             }
-            syn::FnArg::Captured(p) => {
+            syn::FnArg::Captured(arg_captured) => {
                 let mut segments: syn::punctuated::Punctuated<_, Token![::]> = syn::punctuated::Punctuated::new();
-                if let syn::Pat::Ident(ref x) = p.pat {
-                    if let Some(m) = x.mutability {
+                if let syn::Pat::Ident(ref pat_ident) = arg_captured.pat {
+                    if let Some(m) = pat_ident.mutability {
                         m.span.unstable()
                             .error("`mut` arguments are not supported with lru_cache as this could lead to incorrect results being stored")
                             .emit();
                         return None;
                     }
-                    segments.push(syn::PathSegment { ident: x.ident.clone(), arguments: syn::PathArguments::None });
+                    segments.push(syn::PathSegment { ident: pat_ident.ident.clone(), arguments: syn::PathArguments::None });
                 }
-                types.push(p.ty.clone());
+
+                // If the arg type is a reference, remove the reference because the arg will be cloned
+                if let syn::Type::Reference(type_reference) = &arg_captured.ty {
+                    types.push(type_reference.elem.as_ref().to_owned()); // as_ref -> to_owned unboxes the type
+                } else {
+                    types.push(arg_captured.ty.clone());
+                }
+
                 call_args.push(syn::Expr::Path(syn::ExprPath { attrs: Vec::new(), qself: None, path: syn::Path { leading_colon: None, segments } }));
             },
             syn::FnArg::Inferred(p) => {

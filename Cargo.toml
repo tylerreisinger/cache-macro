@@ -19,5 +19,8 @@ features = ["nightly"]
 version = "0.15"
 features = ["full"]
 
+[dev-dependencies]
+lru-cache = "0.1.1"
+
 [lib]
 proc-macro = true
