@@ -34,7 +34,6 @@ to use lru_cache:
 
 * All arguments and return values must implement `Clone`.
 * The function may not take `self` in any form.
-* Reference arguments are not supported.
 
 The macro will use the LruCache at `::lru_cache::LruCache`. This may be made configurable in the future.
 
