@@ -1,5 +1,13 @@
 lru-cache-macros
 ================
+[![Build Status](https://travis-ci.org/tylerreisinger/lru-cache-macro.svg?branch=master)](https://travis-ci.org/tylerreisinger/lru-cache-macro)
+[![lru-cache-macros on docs.rs][docsrs-image]][docsrs]
+[![lru-cache-macros on crates.io][crates-image]][crates]
+
+[docsrs-image]: https://docs.rs/lru-cache-macros/badge.svg
+[docsrs]: https://docs.rs/lru-cache-macros/0.2.0/lru_cache_macros/
+[crates-image]: https://img.shields.io/crates/v/lru-cache-macros.svg
+[crates]: https://crates.io/crates/lru-cache-macros/
 
 An attribute procedural macro to automatically cache the result of a function given a set of inputs.
 

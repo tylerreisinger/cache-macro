@@ -6,6 +6,7 @@ edition = "2018"
 repository = "https://github.com/tylerreisinger/lru-cache-macro"
 homepage = "https://github.com/tylerreisinger/lru-cache-macro"
 readme = "README.md"
+documentation = "https://docs.rs/lru-cache-macros/0.2.0/lru_cache_macros/"
 categories = ["caching"]
 keywords = ["lru", "procedural-macro", "cache"]
 license = "MIT"
