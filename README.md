@@ -26,10 +26,7 @@ fn fib(x: u32) -> u64 {
     }
 }
 
-#[test]
-fn test_fib() {
-    assert_eq!(fib(19), 6765);
-}
+assert_eq!(fib(19), 6765);
 ```
 
 The above example only calls `fib` twenty times, with the values from 0 to 19. All intermediate
@@ -43,7 +40,8 @@ to use lru_cache:
 * All arguments and return values must implement `Clone`.
 * The function may not take `self` in any form.
 
-The macro will use the LruCache at `::lru_cache::LruCache`. This may be made configurable in the future.
+The macro will use the LruCache at `::lru_cache::LruCache` by default. This can be changed by
+setting the `cache_type` config variable as shown in the configuration section.
 
 The `LruCache` type used must accept two generic parameters `<Args, Return>` and must support methods
 `get_mut(&K)` and `insert(K, V)`. The `lru-cache` crate meets these requirements.
@@ -51,9 +49,20 @@ The `LruCache` type used must accept two generic parameters `<Args, Return>` and
 Currently, this crate only works on nightly rust. However, once the 2018 edition stabilizes as well as the
 procedural macro diagnostic interface, it should be able to run on stable.
 
-# Details
+# Configuration:
 
-The created cache resides in thread-local storage so that multiple threads may simultaneously call
+The lru_cache macro can be configured by adding additional attributes under `#[lru_cache(size)]`.
+
+All configuration attributes take the form `#[lru_config(...)]`. The available attributes are:
+
+* `#[lru_config(cache_type = ...)]`
+
+    This allows the cache type used internally to be changed. The default is equivalent to
+    
+    ```#[lru_config(cache_type = ::lru_cache::LruCache)]```
+
+# Details
+AThe created cache resides in thread-local storage so that multiple threads may simultaneously call
 the decorated function, but will not share cached results with each other.
 
 The above example will generate the following code:
@@ -66,10 +75,10 @@ fn fib(x: u32) -> u64 {
     use std::cell::UnsafeCell;
     use std::thread_local;
 
-     thread_local!(
-          static cache: UnsafeCell<::lru_cache::LruCache<(u32,), u64>> =
-              UnsafeCell::new(::lru_cache::LruCache::new(20usize));
-     );
+    thread_local!(
+         static cache: UnsafeCell<::lru_cache::LruCache<(u32,), u64>> =
+             UnsafeCell::new(::lru_cache::LruCache::new(20usize));
+    );
 
     cache.with(|c|
         {
@@ -86,4 +95,3 @@ fn fib(x: u32) -> u64 {
         })
 }
 ```
-

@@ -21,7 +21,7 @@ features = ["nightly"]
 
 [dependencies.syn]
 version = "0.15"
-features = ["full"]
+features = ["full", "extra-traits"]
 
 [dev-dependencies]
 lru-cache = "0.1.1"

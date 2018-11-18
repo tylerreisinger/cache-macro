@@ -32,13 +32,24 @@
 //! * All arguments and return values must implement `Clone`.
 //! * The function may not take `self` in any form.
 //!
-//! The macro will use the LruCache at `::lru_cache::LruCache`. This may be made configurable in the future.
+//! The macro will use the LruCache at `::lru_cache::LruCache` by default. This can be changed by
+//! setting the `cache_type` config variable as shown in the configuration section.
 //!
 //! The `LruCache` type used must accept two generic parameters `<Args, Return>` and must support methods
 //! `get_mut(&K)` and `insert(K, V)`. The `lru-cache` crate meets these requirements.
 //!
 //! Currently, this crate only works on nightly rust. However, once the 2018 edition stabilizes as well as the
 //! procedural macro diagnostic interface, it should be able to run on stable.
+//!
+//! # Configuration:
+//!
+//! The lru_cache macro can be configured by adding additional attributes under `#[lru_cache(size)]`.
+//!
+//! All configuration attributes take the form `#[lru_config(...)]`. The available attributes are:
+//!
+//! * `#[lru_config(cache_type = ...)]`
+//!     This allows the cache type used internally to be changed. The default is equivalent to
+//!     `#[lru_config(cache_type = ::lru_cache::LruCache)]`
 //!
 //! # Details
 //!
@@ -92,10 +103,10 @@ use syn::punctuated::Punctuated;
 use quote::quote;
 use proc_macro2;
 
+mod config;
 mod error;
-use self::error::DiagnosticError;
 
-type Result<T> = result::Result<T, DiagnosticError>;
+use self::error::{DiagnosticError, Result};
 
 #[proc_macro_attribute]
 pub fn lru_cache(attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -117,6 +128,14 @@ fn lru_cache_impl(attr: TokenStream, item: TokenStream) -> Result<TokenStream> {
             return Err(DiagnosticError::new_with_syn_error(diag, e));
         }
     };
+
+    let macro_config;
+    {
+        let attribs = &original_fn.attrs[..];
+        println!("{:?}", attribs);
+        macro_config = config::Config::parse_from_attributes(attribs)?;
+    }
+    original_fn.attrs = Vec::new();
 
     let mut new_fn = original_fn.clone();
 
@@ -152,6 +171,8 @@ fn lru_cache_impl(attr: TokenStream, item: TokenStream) -> Result<TokenStream> {
         elems: types,
     };
 
+    let cache_type = macro_config.cache_type;
+
     let lru_body: syn::Block = parse_quote! {
         {
             use std::cell::UnsafeCell;
@@ -159,8 +180,8 @@ fn lru_cache_impl(attr: TokenStream, item: TokenStream) -> Result<TokenStream> {
             thread_local!(
                 // We use `UnsafeCell` here to allow recursion. Since it is in the TLS, it should
                 // not introduce any actual unsafety.
-                static cache: UnsafeCell<::lru_cache::LruCache<#tuple_type, #return_type>> =
-                    UnsafeCell::new(::lru_cache::LruCache::new(#cache_size));
+                static cache: UnsafeCell<#cache_type<#tuple_type, #return_type>> =
+                    UnsafeCell::new(#cache_type::new(#cache_size));
             );
             cache.with(|c| {
                 let mut cache_ref = unsafe { &mut *c.get() };

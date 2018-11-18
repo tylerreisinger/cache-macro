@@ -1,3 +1,4 @@
+use std::result;
 use proc_macro::Diagnostic;
 use syn;
 
@@ -30,3 +31,5 @@ impl DiagnosticError {
         self.diagnostic.emit();
     }
 }
+
+pub type Result<T> = result::Result<T, DiagnosticError>;
