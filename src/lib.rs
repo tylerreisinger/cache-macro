@@ -51,6 +51,35 @@
 //!     This allows the cache type used internally to be changed. The default is equivalent to
 //!     `#[lru_config(cache_type = ::lru_cache::LruCache)]`
 //!
+//! * `#[lru_config(ignore_args = ...)]`
+//!
+//! This allows certain arguments to be ignored for the purposes of caching. That means they are not part of the
+//! hash table key and thus should never influence the output of the function. It can be useful for diagnostic settings,
+//! returning the number of times executed, or other introspection purposes.
+//!
+//! `ignore_args` takes a comma-separated list of variable identifiers to ignore.
+//!
+//! ### Example:
+//! ```rust
+//! use lru_cache_macros::lru_cache;
+//! #[lru_cache(20)]
+//! #[lru_config(ignore_args = call_count)]
+//! fn fib(x: u64, call_count: &mut u32) -> u64 {
+//!     *call_count += 1;
+//!     if x <= 1 {
+//!         1
+//!     } else {
+//!         fib(x - 1, call_count) + fib(x - 2, call_count)
+//!     }
+//! }
+//!
+//! let mut call_count = 0;
+//! assert_eq!(fib(39, &mut call_count), 102_334_155);
+//! assert_eq!(call_count, 40);
+//! ```
+//!
+//! The `call_count` argument can vary, caching is only done based on `x`.
+//!
 //! # Details
 //!
 //! The created cache resides in thread-local storage so that multiple threads may simultaneously call
@@ -132,7 +161,6 @@ fn lru_cache_impl(attr: TokenStream, item: TokenStream) -> Result<TokenStream> {
     let macro_config;
     {
         let attribs = &original_fn.attrs[..];
-        println!("{:?}", attribs);
         macro_config = config::Config::parse_from_attributes(attribs)?;
     }
     original_fn.attrs = Vec::new();
@@ -153,9 +181,9 @@ fn lru_cache_impl(attr: TokenStream, item: TokenStream) -> Result<TokenStream> {
     let new_name = format!("__lru_base_{}", original_fn.ident.to_string());
     original_fn.ident = syn::Ident::new(&new_name[..], original_fn.ident.span());
 
-    let (call_args, types) = get_args_and_types(&original_fn)?;
+    let (call_args, types, cache_args) = get_args_and_types(&original_fn, &macro_config)?;
 
-    let cloned_args = make_cloned_args_tuple(&call_args);
+    let cloned_args = make_cloned_args_tuple(&cache_args);
 
     let fn_path = path_from_ident(original_fn.ident.clone());
 
@@ -247,9 +275,13 @@ fn make_cloned_args_tuple(args: &Punctuated<syn::Expr, Token![,]>) -> syn::ExprT
     }
 }
 
-fn get_args_and_types(f: &syn::ItemFn) -> Result<(Punctuated<syn::Expr, Token![,]>, Punctuated<syn::Type, Token![,]>)> {
+fn get_args_and_types(f: &syn::ItemFn, config: &config::Config) ->
+        Result<(Punctuated<syn::Expr, Token![,]>, Punctuated<syn::Type, Token![,]>, Punctuated<syn::Expr, Token![,]>)>
+{
     let mut call_args = Punctuated::<_, Token![,]>::new();
     let mut types = Punctuated::<_, Token![,]>::new();
+    let mut cache_args = Punctuated::<_, Token![,]>::new();
+
     for input in &f.decl.inputs {
         match input {
             syn::FnArg::SelfValue(p) => {
@@ -264,23 +296,41 @@ fn get_args_and_types(f: &syn::ItemFn) -> Result<(Punctuated<syn::Expr, Token![,
             }
             syn::FnArg::Captured(arg_captured) => {
                 let mut segments: syn::punctuated::Punctuated<_, Token![::]> = syn::punctuated::Punctuated::new();
+                let arg_name;
                 if let syn::Pat::Ident(ref pat_ident) = arg_captured.pat {
+                    arg_name = pat_ident.ident.clone();
                     if let Some(m) = pat_ident.mutability {
-                        let diag = m.span.unstable()
-                            .error("`mut` arguments are not supported with lru_cache as this could lead to incorrect results being stored");
-                        return Err(DiagnosticError::new(diag));
+                        if !config.ignore_args.contains(&arg_name) {
+                            let diag = m.span.unstable()
+                                .error("`mut` arguments are not supported with lru_cache as this could lead to incorrect results being stored");
+                            return Err(DiagnosticError::new(diag));
+                        }
                     }
                     segments.push(syn::PathSegment { ident: pat_ident.ident.clone(), arguments: syn::PathArguments::None });
-                }
-
-                // If the arg type is a reference, remove the reference because the arg will be cloned
-                if let syn::Type::Reference(type_reference) = &arg_captured.ty {
-                    types.push(type_reference.elem.as_ref().to_owned()); // as_ref -> to_owned unboxes the type
                 } else {
-                    types.push(arg_captured.ty.clone());
+                    let diag = arg_captured.span().unstable()
+                        .error("unsupported argument kind");
+                    return Err(DiagnosticError::new(diag));
                 }
 
-                call_args.push(syn::Expr::Path(syn::ExprPath { attrs: Vec::new(), qself: None, path: syn::Path { leading_colon: None, segments } }));
+                let arg_path = syn::Expr::Path(syn::ExprPath { attrs: Vec::new(), qself: None, path: syn::Path { leading_colon: None, segments } });
+
+                if !config.ignore_args.contains(&arg_name) {
+
+                    // If the arg type is a reference, remove the reference because the arg will be cloned
+                    if let syn::Type::Reference(type_reference) = &arg_captured.ty {
+                        types.push(type_reference.elem.as_ref().to_owned()); // as_ref -> to_owned unboxes the type
+                    } else {
+                        types.push(arg_captured.ty.clone());
+                    }
+
+                    cache_args.push(arg_path.clone());
+                } else {
+                    println!("Ignoring {:?}", arg_name);
+                }
+
+
+                call_args.push(arg_path);
             },
             syn::FnArg::Inferred(p) => {
                 let diag = p.span().unstable()
@@ -299,5 +349,5 @@ fn get_args_and_types(f: &syn::ItemFn) -> Result<(Punctuated<syn::Expr, Token![,
         types.push_punct(syn::token::Comma { spans: [proc_macro2::Span::call_site(); 1] })
     }
 
-    Ok((call_args, types))
+    Ok((call_args, types, cache_args))
 }

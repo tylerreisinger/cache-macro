@@ -60,6 +60,35 @@ All configuration attributes take the form `#[lru_config(...)]`. The available a
     This allows the cache type used internally to be changed. The default is equivalent to
     
     ```#[lru_config(cache_type = ::lru_cache::LruCache)]```
+    
+* `#[lru_config(ignore_args = ...)]`
+    
+    This allows certain arguments to be ignored for the purposes of caching. That means they are not part of the 
+    hash table key and thus should never influence the output of the function. It can be useful for diagnostic settings,
+    returning the number of times executed, or other introspection purposes.
+    
+    `ignore_args` takes a comma-separated list of variable identifiers to ignore.
+    
+    ### Example:
+    ```rust
+    use lru_cache_macros::lru_cache;
+    #[lru_cache(20)]
+    #[lru_config(ignore_args = call_count)]
+    fn fib(x: u64, call_count: &mut u32) -> u64 {
+        *call_count += 1;
+        if x <= 1 {
+            1
+        } else {
+            fib(x - 1, call_count) + fib(x - 2, call_count)
+        }
+    }
+
+    let mut call_count = 0;
+    assert_eq!(fib(39, &mut call_count), 102_334_155);
+    assert_eq!(call_count, 40);
+    ```
+    
+    The `call_count` argument can vary, caching is only done based on `x`.
 
 # Details
 AThe created cache resides in thread-local storage so that multiple threads may simultaneously call

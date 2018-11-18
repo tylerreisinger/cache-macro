@@ -3,7 +3,6 @@ fn multiple_args() {
     use lru_cache_macros::lru_cache;
 
     #[lru_cache(200)]
-    #[lru_config(cache_type = ::lru_cache::LruCache)]
     fn ackermann(m: u64, n: u64) -> u64 {
         if m == 0 {
             n + 1

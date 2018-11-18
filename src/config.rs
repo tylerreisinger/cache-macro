@@ -1,4 +1,5 @@
 use std::default::Default;
+use std::collections::HashSet;
 
 use proc_macro2;
 use syn::{self, Token, parenthesized};
@@ -9,6 +10,11 @@ use crate::error::{DiagnosticError, Result};
 
 pub struct Config {
     pub cache_type: syn::Path,
+    pub ignore_args: HashSet<syn::Ident>,
+}
+
+struct IgnoreArgsAttrib {
+    ignore_args: HashSet<syn::Ident>,
 }
 
 struct CacheTypeAttrib {
@@ -17,6 +23,7 @@ struct CacheTypeAttrib {
 
 enum ConfigAttrib {
     CacheType(CacheTypeAttrib),
+    IgnoreArgs(IgnoreArgsAttrib),
 }
 
 impl Config {
@@ -44,9 +51,8 @@ impl Config {
 
         for parsed_attrib in parsed_attributes {
             match parsed_attrib {
-                ConfigAttrib::CacheType(val) => {
-                    config.cache_type = val.type_path;
-                }
+                ConfigAttrib::CacheType(val) => config.cache_type = val.type_path,
+                ConfigAttrib::IgnoreArgs(val) => config.ignore_args = val.ignore_args,
             }
         }
 
@@ -58,6 +64,7 @@ impl Default for Config {
     fn default() -> Config {
         Config {
             cache_type: make_path_from_segments(&["lru_cache", "LruCache"], true, proc_macro2::Span::call_site()),
+            ignore_args: HashSet::new(),
         }
     }
 }
@@ -92,6 +99,7 @@ impl Parse for ConfigAttrib {
 
         match &name.to_string()[..] {
             "cache_type" => Ok(ConfigAttrib::CacheType(content.parse::<CacheTypeAttrib>()?)),
+            "ignore_args" => Ok(ConfigAttrib::IgnoreArgs(content.parse::<IgnoreArgsAttrib>()?)),
             _ => Err(syn::parse::Error::new(
                 name.span(), format!("unrecognized config option '{}'", name.to_string())
             ))
@@ -104,6 +112,16 @@ impl Parse for CacheTypeAttrib {
         input.parse::<Token![=]>()?;
         Ok(CacheTypeAttrib {
             type_path: input.parse::<syn::Path>()?
+        })
+    }
+}
+
+impl Parse for IgnoreArgsAttrib {
+    fn parse(input: ParseStream) -> syn::parse::Result<Self> {
+        input.parse::<Token![=]>()?;
+        let elems = syn::punctuated::Punctuated::<syn::Ident, Token![,]>::parse_terminated(input)?;
+        Ok(IgnoreArgsAttrib {
+            ignore_args: elems.into_iter().collect(),
         })
     }
 }
