@@ -123,6 +123,7 @@
 extern crate proc_macro;
 
 use std::result;
+use std::ops::Deref;
 
 use proc_macro::TokenStream;
 use syn;
@@ -168,9 +169,12 @@ fn lru_cache_impl(attr: TokenStream, item: TokenStream) -> Result<TokenStream> {
     original_fn.attrs = out_attributes;
 
     let mut new_fn = original_fn.clone();
+    let (orig_ret_type, cache_ret_type, cache_value_type) = build_return_types(&original_fn)?;
+    if let syn::ReturnType::Type(_, ref mut output) = original_fn.decl.output {
+        *output = orig_ret_type;
+    }
 
     let cache_size = get_lru_size(attr)?;
-    let return_type = get_cache_fn_return_type(&original_fn)?;
 
     let new_name = format!("__lru_base_{}", original_fn.ident.to_string());
     original_fn.ident = syn::Ident::new(&new_name[..], original_fn.ident.span());
@@ -191,6 +195,11 @@ fn lru_cache_impl(attr: TokenStream, item: TokenStream) -> Result<TokenStream> {
         elems: types,
     };
 
+    // Compute the `else` body for when the cache does not have the results for this call.
+    // This changes if the return type is a reference type or not.
+    let cache_miss_body = build_cache_miss_branch_body(&cache_ret_type, &fn_call);
+    let cache_hit_body = build_cache_hit_branch_body(&cache_ret_type);
+
     let cache_type = macro_config.cache_type;
 
     let lru_body: syn::Block = parse_quote! {
@@ -200,7 +209,7 @@ fn lru_cache_impl(attr: TokenStream, item: TokenStream) -> Result<TokenStream> {
             thread_local!(
                 // We use `UnsafeCell` here to allow recursion. Since it is in the TLS, it should
                 // not introduce any actual unsafety.
-                static cache: UnsafeCell<#cache_type<#tuple_type, #return_type>> =
+                static cache: UnsafeCell<#cache_type<#tuple_type, #cache_value_type>> =
                     UnsafeCell::new(#cache_type::new(#cache_size));
             );
             cache.with(|c| {
@@ -208,13 +217,8 @@ fn lru_cache_impl(attr: TokenStream, item: TokenStream) -> Result<TokenStream> {
                 let cloned_args = #cloned_args;
 
                 let stored_result = cache_ref.get_mut(&cloned_args);
-                if let Some(stored_result) = stored_result {
-                    stored_result.clone()
-                } else {
-                    let ret = #fn_call;
-                    cache_ref.insert(cloned_args, ret.clone());
-                    ret
-                }
+                if let Some(stored_result) = stored_result #cache_hit_body
+                else #cache_miss_body
             })
         }
     };
@@ -229,9 +233,50 @@ fn lru_cache_impl(attr: TokenStream, item: TokenStream) -> Result<TokenStream> {
     Ok(out.into())
 }
 
-fn get_cache_fn_return_type(original_fn: &syn::ItemFn) -> Result<Box<syn::Type>> {
+fn build_cache_hit_branch_body(cache_ret_type: &syn::Type) -> syn::Block {
+    if let syn::Type::Reference(ref_type) = cache_ret_type {
+        let bare_type = &ref_type.elem;
+        parse_quote! {{
+            unsafe { std::mem::transmute::<_, &'static mut #bare_type>(stored_result) }
+        }}
+    } else {
+        parse_quote! {{
+            stored_result.clone()
+        }}
+    }
+}
+
+fn build_cache_miss_branch_body(cache_ret_type: &syn::Type, inner_fn_call: &syn::ExprCall) -> syn::Block {
+    if let syn::Type::Reference(ref_type) = cache_ret_type {
+        let bare_type = &ref_type.elem;
+        parse_quote! {{
+            let ret = #inner_fn_call;
+            cache_ref.insert(cloned_args, ret);
+            let mut out_ret = cache_ref.get_mut(&cloned_args).unwrap();
+            let mut out_ret = unsafe { std::mem::transmute::<_, &'static mut #bare_type>(out_ret) };
+            out_ret
+        }}
+    } else {
+        parse_quote! {{
+            let ret = #inner_fn_call;
+            cache_ref.insert(cloned_args, ret.clone());
+            ret
+        }}
+    }
+}
+
+/// This function computes the 3 return types used by the macro:
+///
+/// * First is the return type for the original function.
+/// * Second is the return type for the cache function.
+/// * Third is the type to be stored as the value of the hash table.
+fn build_return_types(original_fn: &syn::ItemFn) -> Result<(Box<syn::Type>, Box<syn::Type>, Box<syn::Type>)> {
     if let syn::ReturnType::Type(_, ref ty) = original_fn.decl.output {
-        Ok(ty.clone())
+        if let syn::Type::Reference(ref ref_type) = ty.deref() {
+            Ok((ref_type.elem.clone(), ty.clone(), ref_type.elem.clone()))
+        } else {
+            Ok((ty.clone(), ty.clone(), ty.clone()))
+        }
     } else {
         let diag = original_fn.ident.span().unstable()
             .error("There's no point of caching the output of a function that has no output");
