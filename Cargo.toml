@@ -1,6 +1,6 @@
 [package]
 name = "lru-cache-macros"
-version = "0.2.2"
+version = "0.2.3"
 authors = ["Tyler Reisinger <reisinger.tyler@gmail.com>"]
 edition = "2018"
 repository = "https://github.com/tylerreisinger/lru-cache-macro"
@@ -8,7 +8,7 @@ homepage = "https://github.com/tylerreisinger/lru-cache-macro"
 readme = "README.md"
 documentation = "https://docs.rs/lru-cache-macros"
 categories = ["caching"]
-keywords = ["lru", "procedural-macro", "cache"]
+keywords = ["lru", "procedural-macro", "cache", "memoization"]
 license = "MIT"
 description = "A procedural macro for automatically caching the output of functions."
 
