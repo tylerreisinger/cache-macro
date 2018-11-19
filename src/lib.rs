@@ -109,7 +109,7 @@
 //!                 stored_result.clone()
 //!             } else {
 //!                 let ret = __lru_base_fib(x);
-//!                 cache_ref.insert(cloned_args, ret);
+//!                 cache_ref.insert(cloned_args, ret.clone());
 //!                 ret
 //!             }
 //!         })

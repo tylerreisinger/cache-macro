@@ -94,7 +94,7 @@ All configuration attributes take the form `#[lru_config(...)]`. The available a
 AThe created cache resides in thread-local storage so that multiple threads may simultaneously call
 the decorated function, but will not share cached results with each other.
 
-The above example will generate the following code:
+The first example will generate the following code:
 
 ```rust
 fn __lru_base_fib(x: u32) -> u64 {
@@ -119,7 +119,7 @@ fn fib(x: u32) -> u64 {
             } else {
                 let ret = __lru_base_fib(x);
                 cache_ref.insert(cloned_args, ret);
-                ret
+                ret.clone()
             }
         })
 }
