@@ -212,7 +212,7 @@ fn lru_cache_impl(attr: TokenStream, item: TokenStream) -> Result<TokenStream> {
                     stored_result.clone()
                 } else {
                     let ret = #fn_call;
-                    cache_ref.insert(cloned_args, ret);
+                    cache_ref.insert(cloned_args, ret.clone());
                     ret
                 }
             })
