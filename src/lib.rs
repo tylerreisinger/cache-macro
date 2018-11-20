@@ -195,27 +195,29 @@ fn lru_cache_impl(attr: TokenStream, item: TokenStream) -> Result<TokenStream> {
 
     let lru_body: syn::Block = parse_quote! {
         {
-            use std::cell::UnsafeCell;
-            use std::thread_local;
-            thread_local!(
-                // We use `UnsafeCell` here to allow recursion. Since it is in the TLS, it should
-                // not introduce any actual unsafety.
-                static cache: UnsafeCell<#cache_type<#tuple_type, #return_type>> =
-                    UnsafeCell::new(#cache_type::new(#cache_size));
-            );
-            cache.with(|c| {
-                let mut cache_ref = unsafe { &mut *c.get() };
-                let cloned_args = #cloned_args;
+            extern crate lazy_static;
+            use std::sync::Mutex;
 
-                let stored_result = cache_ref.get_mut(&cloned_args);
-                if let Some(stored_result) = stored_result {
-                    stored_result.clone()
-                } else {
-                    let ret = #fn_call;
-                    cache_ref.insert(cloned_args, ret.clone());
-                    ret
-                }
-            })
+            lazy_static::lazy_static! {
+                static ref cache: Mutex<#cache_type<#tuple_type, #return_type>> =
+                    Mutex::new(#cache_type::new(#cache_size));
+            }
+
+            let cloned_args = #cloned_args;
+
+            let mut cache_unlocked = cache.lock().unwrap();
+            let stored_result = cache_unlocked.get_mut(&cloned_args);
+            if let Some(stored_result) = stored_result {
+                return stored_result.clone();
+            };
+
+            // must unlock here to allow potentially recursive call
+            drop(cache_unlocked);
+
+            let ret = #fn_call;
+            let mut cache_unlocked = cache.lock().unwrap();
+            cache_unlocked.insert(cloned_args, ret.clone());
+            ret
         }
     };
 

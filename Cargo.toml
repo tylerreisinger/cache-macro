@@ -14,6 +14,7 @@ description = "A procedural macro for automatically caching the output of functi
 
 [dependencies]
 quote = "0.6"
+lazy_static = "1.2.0"
 
 [dependencies.proc-macro2]
 version = "0.4"
