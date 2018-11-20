@@ -287,26 +287,28 @@ fn build_tls_cache_body(full_cache_type: &syn::Type, cache_new: &syn::Expr,
 {
     parse_quote! {
         {
-            use std::cell::UnsafeCell;
+            use std::cell::RefCell;
             use std::thread_local;
             thread_local!(
-                // We use `UnsafeCell` here to allow recursion. Since it is in the TLS, it should
-                // not introduce any actual unsafety.
-                static cache: UnsafeCell<#full_cache_type> =
-                    UnsafeCell::new(#cache_new);
+                static cache: RefCell<#full_cache_type> =
+                    RefCell::new(#cache_new);
             );
             cache.with(|c| {
-                let mut cache_ref = unsafe { &mut *c.get() };
+                let mut cache_ref = c.borrow_mut();
                 let cloned_args = #cloned_args;
 
                 let stored_result = cache_ref.get_mut(&cloned_args);
                 if let Some(stored_result) = stored_result {
-                    stored_result.clone()
-                } else {
-                    let ret = #inner_fn_call;
-                    cache_ref.insert(cloned_args, ret.clone());
-                    ret
+                    return stored_result.clone()
                 }
+
+                // Don't hold a mutable borrow across
+                // the recursive function call
+                drop(cache_ref);
+
+                let ret = #inner_fn_call;
+                c.borrow_mut().insert(cloned_args, ret.clone());
+                ret
             })
         }
     }
