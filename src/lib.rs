@@ -48,8 +48,10 @@
 //! All configuration attributes take the form `#[lru_config(...)]`. The available attributes are:
 //!
 //! * `#[lru_config(cache_type = ...)]`
-//!     This allows the cache type used internally to be changed. The default is equivalent to
-//!     `#[lru_config(cache_type = ::lru_cache::LruCache)]`
+//!
+//! This allows the cache type used internally to be changed. The default is equivalent to
+//!
+//! ```#[lru_config(cache_type = ::lru_cache::LruCache)]```
 //!
 //! * `#[lru_config(ignore_args = ...)]`
 //!
@@ -80,12 +82,66 @@
 //!
 //! The `call_count` argument can vary, caching is only done based on `x`.
 //!
+//! * `#[lru_config(thread_local)]`
+//!
+//! Store the cache in thread-local storage instead of global static storage. This avoids the overhead of Mutex locking,
+//! but each thread will be given its own cache, and all caching will not affect any other thread.
+//!
+//! Expanding on the first example:
+//!
+//! ```rust
+//! use lru_cache_macros::lru_cache;
+//!
+//! #[lru_cache(20)]
+//! #[lru_config(thread_local)]
+//! fn fib(x: u32) -> u64 {
+//!     println!("{:?}", x);
+//!     if x <= 1 {
+//!         1
+//!     } else {
+//!         fib(x - 1) + fib(x - 2)
+//!     }
+//! }
+//!
+//! assert_eq!(fib(19), 6765);
+//! ```
+//!
 //! # Details
+//! The created cache is stored as a static variable protected by a mutex unless the `#[lru_config(thread_local)]` configuration
+//! is added.
 //!
-//! The created cache resides in thread-local storage so that multiple threads may simultaneously call
-//! the decorated function, but will not share cached results with each other.
+//! With the default settings, the fibonacci example will generate the following code:
 //!
-//! The above example will generate the following code:
+//! ```rust
+//! fn __lru_base_fib(x: u32) -> u64 {
+//!     if x <= 1 { 1 } else { fib(x - 1) + fib(x - 2) }
+//! }
+//! fn fib(x: u32) -> u64 {
+//!     use lazy_static::lazy_static;
+//!     use std::sync::Mutex;
+//!
+//!     lazy_static! {
+//!         static ref cache: Mutex<::lru_cache::LruCache<(u32,), u64>> =
+//!             Mutex::new(::lru_cache::LruCache::new(20usize));
+//!     }
+//!
+//!     let cloned_args = (x.clone(),);
+//!     let mut cache_unlocked = cache.lock().unwrap();
+//!     let stored_result = cache_unlocked.get_mut(&cloned_args);
+//!     if let Some(stored_result) = stored_result {
+//!         return stored_result.clone();
+//!     };
+//!     drop(cache_unlocked);
+//!     let ret = __lru_base_fib(x);
+//!     let mut cache_unlocked = cache.lock().unwrap();
+//!     cache_unlocked.insert(cloned_args, ret.clone());
+//!     ret
+//! }
+//!
+//! ```
+//!
+//! Whereas, if you use the `#[lru_config(thread_local)]` the generated code will look like:
+//!
 //!
 //! ```rust
 //! fn __lru_base_fib(x: u32) -> u64 {
@@ -115,7 +171,6 @@
 //!         })
 //! }
 //! ```
-
 
 #![feature(extern_crate_item_prelude)]
 #![feature(proc_macro_diagnostic)]
@@ -191,33 +246,18 @@ fn lru_cache_impl(attr: TokenStream, item: TokenStream) -> Result<TokenStream> {
         elems: types,
     };
 
-    let cache_type = macro_config.cache_type;
-
-    let lru_body: syn::Block = parse_quote! {
-        {
-            use std::cell::UnsafeCell;
-            use std::thread_local;
-            thread_local!(
-                // We use `UnsafeCell` here to allow recursion. Since it is in the TLS, it should
-                // not introduce any actual unsafety.
-                static cache: UnsafeCell<#cache_type<#tuple_type, #return_type>> =
-                    UnsafeCell::new(#cache_type::new(#cache_size));
-            );
-            cache.with(|c| {
-                let mut cache_ref = unsafe { &mut *c.get() };
-                let cloned_args = #cloned_args;
-
-                let stored_result = cache_ref.get_mut(&cloned_args);
-                if let Some(stored_result) = stored_result {
-                    stored_result.clone()
-                } else {
-                    let ret = #fn_call;
-                    cache_ref.insert(cloned_args, ret.clone());
-                    ret
-                }
-            })
-        }
+    // Build all common types needed for each body impl.
+    let cache_type = &macro_config.cache_type;
+    let cache_type_with_generics: syn::Type = parse_quote! {
+        #cache_type<#tuple_type, #return_type>
     };
+    let cache_new: syn::Expr = parse_quote! {
+        #cache_type::new(#cache_size)
+    };
+
+    let lru_body = build_cache_body(&cache_type_with_generics, &cache_new, &cloned_args,
+        &fn_call, &macro_config);
+
 
     new_fn.block = Box::new(lru_body);
 
@@ -227,6 +267,82 @@ fn lru_cache_impl(attr: TokenStream, item: TokenStream) -> Result<TokenStream> {
         #new_fn
     };
     Ok(out.into())
+}
+
+// Build the body of the caching function. What is constructed depends on the config value.
+fn build_cache_body(full_cache_type: &syn::Type, cache_new: &syn::Expr,
+                    cloned_args: &syn::ExprTuple, inner_fn_call: &syn::ExprCall,
+                    config: &config::Config) -> syn::Block
+{
+    if config.use_tls {
+        build_tls_cache_body(full_cache_type, cache_new, cloned_args, inner_fn_call)
+    } else {
+        build_mutex_cache_body(full_cache_type, cache_new, cloned_args, inner_fn_call)
+    }
+}
+
+// Build the body of the caching function which puts the cache in thread-local storage.
+fn build_tls_cache_body(full_cache_type: &syn::Type, cache_new: &syn::Expr,
+                     cloned_args: &syn::ExprTuple, inner_fn_call: &syn::ExprCall) -> syn::Block
+{
+    parse_quote! {
+        {
+            use std::cell::UnsafeCell;
+            use std::thread_local;
+            thread_local!(
+                // We use `UnsafeCell` here to allow recursion. Since it is in the TLS, it should
+                // not introduce any actual unsafety.
+                static cache: UnsafeCell<#full_cache_type> =
+                    UnsafeCell::new(#cache_new);
+            );
+            cache.with(|c| {
+                let mut cache_ref = unsafe { &mut *c.get() };
+                let cloned_args = #cloned_args;
+
+                let stored_result = cache_ref.get_mut(&cloned_args);
+                if let Some(stored_result) = stored_result {
+                    stored_result.clone()
+                } else {
+                    let ret = #inner_fn_call;
+                    cache_ref.insert(cloned_args, ret.clone());
+                    ret
+                }
+            })
+        }
+    }
+}
+
+// Build the body of the caching function which guards the static cache with a mutex.
+fn build_mutex_cache_body(full_cache_type: &syn::Type, cache_new: &syn::Expr,
+                     cloned_args: &syn::ExprTuple, inner_fn_call: &syn::ExprCall) -> syn::Block
+{
+    parse_quote! {
+        {
+            use lazy_static::lazy_static;
+            use std::sync::Mutex;
+
+            lazy_static! {
+                static ref cache: Mutex<#full_cache_type> =
+                    Mutex::new(#cache_new);
+            }
+
+            let cloned_args = #cloned_args;
+
+            let mut cache_unlocked = cache.lock().unwrap();
+            let stored_result = cache_unlocked.get_mut(&cloned_args);
+            if let Some(stored_result) = stored_result {
+                return stored_result.clone();
+            };
+
+            // must unlock here to allow potentially recursive call
+            drop(cache_unlocked);
+
+            let ret = #inner_fn_call;
+            let mut cache_unlocked = cache.lock().unwrap();
+            cache_unlocked.insert(cloned_args, ret.clone());
+            ret
+        }
+    }
 }
 
 fn get_cache_fn_return_type(original_fn: &syn::ItemFn) -> Result<Box<syn::Type>> {

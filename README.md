@@ -89,12 +89,67 @@ All configuration attributes take the form `#[lru_config(...)]`. The available a
     ```
     
     The `call_count` argument can vary, caching is only done based on `x`.
+    
+* `#[lru_config(thread_local)]`
+
+    Store the cache in thread-local storage instead of global static storage. This avoids the overhead of Mutex locking,
+    but each thread will be given its own cache, and all caching will not affect any other thread.
+    
+    Expanding on the first example:
+    
+    ```rust
+    use lru_cache_macros::lru_cache;
+
+    #[lru_cache(20)]
+    #[lru_config(thread_local)]
+    fn fib(x: u32) -> u64 {
+        println!("{:?}", x);
+        if x <= 1 {
+            1
+        } else {
+            fib(x - 1) + fib(x - 2)
+        }
+    }
+
+    assert_eq!(fib(19), 6765);
+    ``` 
 
 # Details
-AThe created cache resides in thread-local storage so that multiple threads may simultaneously call
-the decorated function, but will not share cached results with each other.
+The created cache is stored as a static variable protected by a mutex unless the `#[lru_config(thread_local)]` configuration
+is added.
 
-The first example will generate the following code:
+With the default settings, the fibonacci example will generate the following code:
+
+```rust
+fn __lru_base_fib(x: u32) -> u64 {
+    if x <= 1 { 1 } else { fib(x - 1) + fib(x - 2) }
+}
+fn fib(x: u32) -> u64 {
+    use lazy_static::lazy_static;
+    use std::sync::Mutex;
+
+    lazy_static! {
+        static ref cache: Mutex<::lru_cache::LruCache<(u32,), u64>> =
+            Mutex::new(::lru_cache::LruCache::new(20usize));
+    }
+    
+    let cloned_args = (x.clone(),);
+    let mut cache_unlocked = cache.lock().unwrap();
+    let stored_result = cache_unlocked.get_mut(&cloned_args);
+    if let Some(stored_result) = stored_result {
+        return stored_result.clone();
+    };
+    drop(cache_unlocked);
+    let ret = __lru_base_fib(x);
+    let mut cache_unlocked = cache.lock().unwrap();
+    cache_unlocked.insert(cloned_args, ret.clone());
+    ret
+}
+
+```
+
+Whereas, if you use the `#[lru_config(thread_local)]` the generated code will look like:
+
 
 ```rust
 fn __lru_base_fib(x: u32) -> u64 {
@@ -118,8 +173,8 @@ fn fib(x: u32) -> u64 {
                 stored_result.clone()
             } else {
                 let ret = __lru_base_fib(x);
-                cache_ref.insert(cloned_args, ret);
-                ret.clone()
+                cache_ref.insert(cloned_args, ret.clone());
+                ret
             }
         })
 }

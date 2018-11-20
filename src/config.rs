@@ -11,6 +11,7 @@ use crate::error::{DiagnosticError, Result};
 pub struct Config {
     pub cache_type: syn::Path,
     pub ignore_args: HashSet<syn::Ident>,
+    pub use_tls: bool,
 }
 
 struct IgnoreArgsAttrib {
@@ -24,6 +25,7 @@ struct CacheTypeAttrib {
 enum ConfigAttrib {
     CacheType(CacheTypeAttrib),
     IgnoreArgs(IgnoreArgsAttrib),
+    UseTls,
 }
 
 impl Config {
@@ -60,6 +62,7 @@ impl Config {
             match parsed_attrib {
                 ConfigAttrib::CacheType(val) => config.cache_type = val.type_path,
                 ConfigAttrib::IgnoreArgs(val) => config.ignore_args = val.ignore_args,
+                ConfigAttrib::UseTls => config.use_tls = true,
             }
         }
 
@@ -72,6 +75,7 @@ impl Default for Config {
         Config {
             cache_type: make_path_from_segments(&["lru_cache", "LruCache"], true, proc_macro2::Span::call_site()),
             ignore_args: HashSet::new(),
+            use_tls: false,
         }
     }
 }
@@ -107,6 +111,7 @@ impl Parse for ConfigAttrib {
         match &name.to_string()[..] {
             "cache_type" => Ok(ConfigAttrib::CacheType(content.parse::<CacheTypeAttrib>()?)),
             "ignore_args" => Ok(ConfigAttrib::IgnoreArgs(content.parse::<IgnoreArgsAttrib>()?)),
+            "thread_local" => Ok(ConfigAttrib::UseTls),
             _ => Err(syn::parse::Error::new(
                 name.span(), format!("unrecognized config option '{}'", name.to_string())
             ))
