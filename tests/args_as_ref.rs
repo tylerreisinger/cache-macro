@@ -1,8 +1,9 @@
+use lru_cache_macros::lru_cache as cache;
+use lru_cache::LruCache;
+
 #[test]
 fn args_as_ref() {
-    use lru_cache_macros::lru_cache;
-
-    #[lru_cache(20)]
+    #[cache(LruCache : LruCache::new(20))]
     fn fib(x: &u32) -> u64 {
         println!("{:?}", x);
         if *x <= 1 {

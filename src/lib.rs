@@ -6,9 +6,10 @@
 //! # Example:
 //!
 //! ```rust
-//! use lru_cache_macros::lru_cache;
+//! use lru_cache_macros::lru_cache as cache;
+//! use lru_cache::LruCache;
 //!
-//! #[lru_cache(20)]
+//! #[cache(LruCache : LruCache::new(20))]
 //! fn fib(x: u32) -> u64 {
 //!     println!("{:?}", x);
 //!     if x <= 1 {
@@ -63,8 +64,9 @@
 //!
 //! ### Example:
 //! ```rust
-//! use lru_cache_macros::lru_cache;
-//! #[lru_cache(20)]
+//! use lru_cache_macros::lru_cache as cache;
+//! use lru_cache::LruCache;
+//! #[cache(LruCache : LruCache::new(20))]
 //! #[lru_config(ignore_args = call_count)]
 //! fn fib(x: u64, call_count: &mut u32) -> u64 {
 //!     *call_count += 1;
@@ -90,9 +92,10 @@
 //! Expanding on the first example:
 //!
 //! ```rust
-//! use lru_cache_macros::lru_cache;
+//! use lru_cache_macros::lru_cache as cache;
+//! use lru_cache::LruCache;
 //!
-//! #[lru_cache(20)]
+//! #[cache(LruCache : LruCache::new(20))]
 //! #[lru_config(thread_local)]
 //! fn fib(x: u32) -> u64 {
 //!     println!("{:?}", x);
@@ -177,8 +180,6 @@
 #![recursion_limit="128"]
 extern crate proc_macro;
 
-use std::result;
-
 use proc_macro::TokenStream;
 use syn;
 use syn::{Token, parse_quote};
@@ -191,10 +192,32 @@ mod config;
 mod error;
 
 use self::error::{DiagnosticError, Result};
+use syn::parse::Parse;
+use syn::parse::ParseStream;
+use syn::parse_macro_input;
+
+struct Attr {
+    cache_type: syn::Type,
+    cache_creation_expr: syn::Expr,
+}
+
+impl Parse for Attr {
+    fn parse(input: ParseStream) -> syn::parse::Result<Self> {
+        let cache_type: syn::Type = input.parse()?;
+        input.parse::<Token![:]>()?;
+        let cache_creation_expr: syn::Expr = input.parse()?;
+        Ok(Attr {
+            cache_type,
+            cache_creation_expr,
+        })
+    }
+}
 
 // Function shim to allow us to use `Result` and the `?` operator.
 #[proc_macro_attribute]
 pub fn lru_cache(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let attr = parse_macro_input!(attr as Attr);
+
     match lru_cache_impl(attr, item.clone()) {
         Ok(tokens) => return tokens,
         Err(e) => {
@@ -205,7 +228,7 @@ pub fn lru_cache(attr: TokenStream, item: TokenStream) -> TokenStream {
 }
 
 // The main entry point for the macro.
-fn lru_cache_impl(attr: TokenStream, item: TokenStream) -> Result<TokenStream> {
+fn lru_cache_impl(attr: Attr, item: TokenStream) -> Result<TokenStream> {
     let mut original_fn: syn::ItemFn = match syn::parse(item.clone()) {
         Ok(ast) => ast,
         Err(e) => {
@@ -224,7 +247,6 @@ fn lru_cache_impl(attr: TokenStream, item: TokenStream) -> Result<TokenStream> {
 
     let mut new_fn = original_fn.clone();
 
-    let cache_size = get_lru_size(attr)?;
     let return_type = get_cache_fn_return_type(&original_fn)?;
 
     let new_name = format!("__lru_base_{}", original_fn.ident.to_string());
@@ -246,16 +268,12 @@ fn lru_cache_impl(attr: TokenStream, item: TokenStream) -> Result<TokenStream> {
         elems: types,
     };
 
-    // Build all common types needed for each body impl.
-    let cache_type = &macro_config.cache_type;
+    let cache_type = &attr.cache_type;
     let cache_type_with_generics: syn::Type = parse_quote! {
         #cache_type<#tuple_type, #return_type>
     };
-    let cache_new: syn::Expr = parse_quote! {
-        #cache_type::new(#cache_size)
-    };
 
-    let lru_body = build_cache_body(&cache_type_with_generics, &cache_new, &cloned_args,
+    let lru_body = build_cache_body(&cache_type_with_generics, &attr.cache_creation_expr, &cloned_args,
         &fn_call, &macro_config);
 
 
@@ -361,18 +379,6 @@ fn path_from_ident(ident: syn::Ident) -> syn::Expr {
     let mut segments: Punctuated<_, Token![::]> = Punctuated::new();
     segments.push(syn::PathSegment { ident: ident, arguments: syn::PathArguments::None });
     syn::Expr::Path(syn::ExprPath { attrs: Vec::new(), qself: None, path: syn::Path { leading_colon: None, segments: segments} })
-}
-
-fn get_lru_size(attr: TokenStream) -> Result<usize> {
-    let value: result::Result<syn::LitInt, _> = syn::parse(attr.clone());
-
-    if let Ok(val) = value {
-        Ok(val.value() as usize)
-    } else {
-        let diag = proc_macro2::Span::call_site().unstable()
-            .error("The lru_cache macro must specify a maximum cache size as an argument");
-        Err(DiagnosticError::new_with_syn_error(diag, value.err().unwrap()))
-    }
 }
 
 fn make_cloned_args_tuple(args: &Punctuated<syn::Expr, Token![,]>) -> syn::ExprTuple {
