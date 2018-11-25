@@ -8,8 +8,8 @@ use std::time;
 #[test]
 fn thread_local_ignore_args() {
     #[cache(LruCache : LruCache::new(20))]
-    #[lru_config(ignore_args = call_count)]
-    #[lru_config(thread_local)]
+    #[cache_cfg(ignore_args = call_count)]
+    #[cache_cfg(thread_local)]
     fn fib(x: u32, call_count: &mut u32) -> u64 {
         *call_count += 1;
         if x <= 1 {

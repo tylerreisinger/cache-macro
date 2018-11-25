@@ -67,7 +67,7 @@
 //! use lru_cache_macros::lru_cache as cache;
 //! use lru_cache::LruCache;
 //! #[cache(LruCache : LruCache::new(20))]
-//! #[lru_config(ignore_args = call_count)]
+//! #[cache_cfg(ignore_args = call_count)]
 //! fn fib(x: u64, call_count: &mut u32) -> u64 {
 //!     *call_count += 1;
 //!     if x <= 1 {
@@ -96,7 +96,7 @@
 //! use lru_cache::LruCache;
 //!
 //! #[cache(LruCache : LruCache::new(20))]
-//! #[lru_config(thread_local)]
+//! #[cache_cfg(thread_local)]
 //! fn fib(x: u32) -> u64 {
 //!     println!("{:?}", x);
 //!     if x <= 1 {

@@ -4,12 +4,10 @@ use std::collections::HashSet;
 use proc_macro2;
 use syn::{self, Token, parenthesized};
 use syn::parse::{Parse, ParseStream};
-use syn::punctuated::Punctuated;
 
 use crate::error::{DiagnosticError, Result};
 
 pub struct Config {
-    pub cache_type: syn::Path,
     pub ignore_args: HashSet<syn::Ident>,
     pub use_tls: bool,
 }
@@ -18,15 +16,12 @@ struct IgnoreArgsAttrib {
     ignore_args: HashSet<syn::Ident>,
 }
 
-struct CacheTypeAttrib {
-    type_path: syn::Path,
-}
-
 enum ConfigAttrib {
-    CacheType(CacheTypeAttrib),
     IgnoreArgs(IgnoreArgsAttrib),
     UseTls,
 }
+
+const CONFIG_ATTRIBUTE_NAME: &'static str = "cache_cfg";
 
 impl Config {
     // Parse any additional attributes present after `lru_cache` and return a configuration object
@@ -38,7 +33,7 @@ impl Config {
         for attrib in attribs {
             let segs = &attrib.path.segments;
             if segs.len() > 0 {
-                if segs[0].ident.to_string() == "lru_config" {
+                if segs[0].ident == CONFIG_ATTRIBUTE_NAME {
                     let tokens = attrib.tts.clone();
                     let parsed = syn::parse2::<ConfigAttrib>(tokens);
                     match parsed {
@@ -60,7 +55,6 @@ impl Config {
 
         for parsed_attrib in parsed_attributes {
             match parsed_attrib {
-                ConfigAttrib::CacheType(val) => config.cache_type = val.type_path,
                 ConfigAttrib::IgnoreArgs(val) => config.ignore_args = val.ignore_args,
                 ConfigAttrib::UseTls => config.use_tls = true,
             }
@@ -73,32 +67,9 @@ impl Config {
 impl Default for Config {
     fn default() -> Config {
         Config {
-            cache_type: make_path_from_segments(&["lru_cache", "LruCache"], true, proc_macro2::Span::call_site()),
             ignore_args: HashSet::new(),
             use_tls: false,
         }
-    }
-}
-
-fn make_path_from_segments(segments: &[&str], has_leading_colon: bool, span: proc_macro2::Span) -> syn::Path {
-    let leading_colon = if has_leading_colon {
-        Some(syn::token::Colon2 { spans: [span; 2] })
-    } else {
-        None
-    };
-    let mut segments_ast = Punctuated::<syn::PathSegment, Token![::]>::new();
-    for name in segments {
-        let ident = syn::Ident::new(name, span);
-        let seg = syn::PathSegment {
-            ident,
-            arguments: syn::PathArguments::None,
-        };
-        segments_ast.push(seg);
-    }
-
-    syn::Path {
-        leading_colon,
-        segments: segments_ast,
     }
 }
 
@@ -109,22 +80,12 @@ impl Parse for ConfigAttrib {
         let name = content.parse::<syn::Ident>()?;
 
         match &name.to_string()[..] {
-            "cache_type" => Ok(ConfigAttrib::CacheType(content.parse::<CacheTypeAttrib>()?)),
             "ignore_args" => Ok(ConfigAttrib::IgnoreArgs(content.parse::<IgnoreArgsAttrib>()?)),
             "thread_local" => Ok(ConfigAttrib::UseTls),
             _ => Err(syn::parse::Error::new(
                 name.span(), format!("unrecognized config option '{}'", name.to_string())
             ))
         }
-    }
-}
-
-impl Parse for CacheTypeAttrib {
-    fn parse(input: ParseStream) -> syn::parse::Result<Self> {
-        input.parse::<Token![=]>()?;
-        Ok(CacheTypeAttrib {
-            type_path: input.parse::<syn::Path>()?
-        })
     }
 }
 
