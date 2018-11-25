@@ -1,4 +1,4 @@
-use lru_cache_macros::lru_cache as cache;
+use lru_cache_macros::cache;
 use std::time::Duration;
 use expiring_map::ExpiringMap;
 use std::hash::Hash;

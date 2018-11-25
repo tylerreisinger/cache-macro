@@ -6,7 +6,7 @@
 //! # Example:
 //!
 //! ```rust
-//! use lru_cache_macros::lru_cache as cache;
+//! use lru_cache_macros::cache;
 //! use lru_cache::LruCache;
 //!
 //! #[cache(LruCache : LruCache::new(20))]
@@ -64,7 +64,7 @@
 //!
 //! ### Example:
 //! ```rust
-//! use lru_cache_macros::lru_cache as cache;
+//! use lru_cache_macros::cache;
 //! use lru_cache::LruCache;
 //! #[cache(LruCache : LruCache::new(20))]
 //! #[cache_cfg(ignore_args = call_count)]
@@ -92,7 +92,7 @@
 //! Expanding on the first example:
 //!
 //! ```rust
-//! use lru_cache_macros::lru_cache as cache;
+//! use lru_cache_macros::cache;
 //! use lru_cache::LruCache;
 //!
 //! #[cache(LruCache : LruCache::new(20))]
@@ -214,7 +214,7 @@ impl Parse for Attr {
 
 // Function shim to allow us to use `Result` and the `?` operator.
 #[proc_macro_attribute]
-pub fn lru_cache(attr: TokenStream, item: TokenStream) -> TokenStream {
+pub fn cache(attr: TokenStream, item: TokenStream) -> TokenStream {
     let attr = parse_macro_input!(attr as Attr);
 
     match lru_cache_impl(attr, item.clone()) {
