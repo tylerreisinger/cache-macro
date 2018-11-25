@@ -1,12 +1,12 @@
 [package]
 name = "cache-macro"
-version = "0.3.0"
+version = "0.4.0"
 authors = ["Tyler Reisinger <reisinger.tyler@gmail.com>"]
 edition = "2018"
-repository = "https://github.com/tylerreisinger/lru-cache-macro"
-homepage = "https://github.com/tylerreisinger/lru-cache-macro"
+repository = "https://github.com/tylerreisinger/cache-macro"
+homepage = "https://github.com/tylerreisinger/cache-macro"
 readme = "README.md"
-documentation = "https://docs.rs/lru-cache-macros"
+documentation = "https://docs.rs/cache-macro"
 categories = ["caching"]
 keywords = ["lru", "procedural-macro", "cache", "memoization"]
 license = "MIT"
@@ -32,4 +32,4 @@ expiring_map = "0.1.0"
 proc-macro = true
 
 [badges]
-travis-ci = { repository = "tylerreisinger/lru-cache-macro", branch = "master" }
+travis-ci = { repository = "tylerreisinger/cache-macro", branch = "master" }

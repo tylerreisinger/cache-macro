@@ -1,15 +1,17 @@
 cache-macro
 ================
-[![Build Status](https://travis-ci.org/tylerreisinger/lru-cache-macro.svg?branch=master)](https://travis-ci.org/tylerreisinger/lru-cache-macro)
-[![lru-cache-macros on docs.rs][docsrs-image]][docsrs]
-[![lru-cache-macros on crates.io][crates-image]][crates]
+[![Build Status](https://travis-ci.org/tylerreisinger/cache-macro.svg?branch=master)](https://travis-ci.org/tylerreisinger/cache_macro)
+[![cache-macro on docs.rs][docsrs-image]][docsrs]
+[![cache-macro on crates.io][crates-image]][crates]
 
-[docsrs-image]: https://docs.rs/lru-cache-macros/badge.svg
-[docsrs]: https://docs.rs/lru-cache-macros
-[crates-image]: https://img.shields.io/crates/v/lru-cache-macros.svg
-[crates]: https://crates.io/crates/lru-cache-macros/
+[docsrs-image]: https://docs.rs/cache-macro/badge.svg
+[docsrs]: https://docs.rs/cache-macro
+[crates-image]: https://img.shields.io/crates/v/cache-macro.svg
+[crates]: https://crates.io/crates/cache-macro/
 
 A procedural macro to automatically cache the result of a function given a set of inputs.
+
+Previously named 'lru-cache-macros', but renamed to reflect the broadening of scope.
 
 # Example:
 
