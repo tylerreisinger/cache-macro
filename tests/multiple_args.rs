@@ -1,8 +1,9 @@
+use lru_cache_macros::lru_cache as cache;
+use lru_cache::LruCache;
+
 #[test]
 fn multiple_args() {
-    use lru_cache_macros::lru_cache;
-
-    #[lru_cache(200)]
+    #[cache(LruCache : LruCache::new(20))]
     #[inline]
     fn ackermann(m: u64, n: u64) -> u64 {
         if m == 0 {

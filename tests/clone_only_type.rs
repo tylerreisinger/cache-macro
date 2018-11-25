@@ -1,4 +1,5 @@
-use lru_cache_macros::lru_cache;
+use lru_cache_macros::lru_cache as cache;
+use lru_cache::LruCache;
 
 use std::ops;
 
@@ -21,7 +22,7 @@ impl ops::Sub for NoCopyI32 {
 
 #[test]
 fn clone_only_type() {
-    #[lru_cache(20)]
+    #[cache(LruCache : LruCache::new(20))]
     fn fib(x: NoCopyI32) -> NoCopyI32 {
         if x <= NoCopyI32(1) {
             NoCopyI32(1)

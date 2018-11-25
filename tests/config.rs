@@ -1,11 +1,13 @@
-use lru_cache_macros::lru_cache;
+use lru_cache_macros::lru_cache as cache;
+use lru_cache::LruCache;
+
 use std::thread;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time;
 
 #[test]
 fn thread_local_ignore_args() {
-    #[lru_cache(20)]
+    #[cache(LruCache : LruCache::new(20))]
     #[lru_config(ignore_args = call_count)]
     #[lru_config(thread_local)]
     fn fib(x: u32, call_count: &mut u32) -> u64 {
@@ -26,7 +28,7 @@ fn thread_local_ignore_args() {
 fn multithreaded() {
     static CALL_COUNT: AtomicUsize = AtomicUsize::new(0);
 
-    #[lru_cache(20)]
+    #[cache(LruCache : LruCache::new(20))]
     fn fib(x: u32) -> u64 {
         CALL_COUNT.fetch_add(1, Ordering::SeqCst);
         if x <= 1 {

@@ -1,13 +1,14 @@
-use lru_cache_macros::lru_cache;
+use lru_cache_macros::lru_cache as cache;
+use lru_cache::LruCache;
 
 #[test]
 fn multiple_caches() {
     use std::f64;
-    #[lru_cache(20)]
+    #[cache(LruCache : LruCache::new(20))]
     fn cached_sqrt(x: u64) -> f64 {
         f64::sqrt(x as f64)
     }
-    #[lru_cache(20)]
+    #[cache(LruCache : LruCache::new(20))]
     fn cached_log(x: u64) -> f64 {
         f64::ln(x as f64)
     }
