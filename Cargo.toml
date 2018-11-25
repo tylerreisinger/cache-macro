@@ -1,6 +1,6 @@
 [package]
 name = "cache-macro"
-version = "0.4.0"
+version = "0.4.1"
 authors = ["Tyler Reisinger <reisinger.tyler@gmail.com>"]
 edition = "2018"
 repository = "https://github.com/tylerreisinger/cache-macro"
