@@ -11,6 +11,9 @@ lru-cache-macros
 
 An attribute procedural macro to automatically cache the result of a function given a set of inputs.
 
+**This crate has been deprecated in favor of [cache-macro](https://crates.io/crates/cache-macro) which maintains
+the same functionality, but supports more than just lru caches. New code should use that crate instead.**
+
 # Example:
 
 ```rust
