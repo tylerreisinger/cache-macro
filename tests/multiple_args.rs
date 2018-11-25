@@ -1,4 +1,4 @@
-use lru_cache_macros::cache;
+use cache_macro::cache;
 use lru_cache::LruCache;
 
 #[test]

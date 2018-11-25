@@ -1,5 +1,5 @@
 [package]
-name = "lru-cache-macros"
+name = "cache-macro"
 version = "0.3.0"
 authors = ["Tyler Reisinger <reisinger.tyler@gmail.com>"]
 edition = "2018"

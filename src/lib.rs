@@ -1,12 +1,12 @@
-//! lru-cache-macros
+//! cache-macro
 //! ================
 //!
-//! An attribute procedural macro to automatically cache the result of a function given a set of inputs.
+//! A procedural macro to automatically cache the result of a function given a set of inputs.
 //!
 //! # Example:
 //!
 //! ```rust
-//! use lru_cache_macros::cache;
+//! use cache_macro::cache;
 //! use lru_cache::LruCache;
 //!
 //! #[cache(LruCache : LruCache::new(20))]
@@ -27,34 +27,26 @@
 //!
 //! # Usage:
 //!
-//! Simply place `#[lru_cache([size])]` above your function. The function must obey a few properties
+//! Simply place `#[cache(CacheType : constructor)]` above your function. The function must obey a few properties
 //! to use lru_cache:
 //!
 //! * All arguments and return values must implement `Clone`.
 //! * The function may not take `self` in any form.
 //!
-//! The macro will use the LruCache at `::lru_cache::LruCache` by default. This can be changed by
-//! setting the `cache_type` config variable as shown in the configuration section.
-//!
 //! The `LruCache` type used must accept two generic parameters `<Args, Return>` and must support methods
-//! `get_mut(&K)` and `insert(K, V)`. The `lru-cache` crate meets these requirements.
+//! `get_mut(&K) -> Option<&mut V>` and `insert(K, V)`. The `lru-cache` (for LRU caching)
+//! and `expiring_map` (for time-to-live caching) crates currently meet these requirements.
 //!
 //! Currently, this crate only works on nightly rust. However, once the 2018 edition stabilizes as well as the
 //! procedural macro diagnostic interface, it should be able to run on stable.
 //!
 //! # Configuration:
 //!
-//! The lru_cache macro can be configured by adding additional attributes under `#[lru_cache(size)]`.
+//! The lru_cache macro can be configured by adding additional attributes under `#[cache(...)]`.
 //!
-//! All configuration attributes take the form `#[lru_config(...)]`. The available attributes are:
+//! All configuration attributes take the form `#[cache_cfg(...)]`. The available attributes are:
 //!
-//! * `#[lru_config(cache_type = ...)]`
-//!
-//! This allows the cache type used internally to be changed. The default is equivalent to
-//!
-//! ```#[lru_config(cache_type = ::lru_cache::LruCache)]```
-//!
-//! * `#[lru_config(ignore_args = ...)]`
+//! * `#[cache_cfg(ignore_args = ...)]`
 //!
 //! This allows certain arguments to be ignored for the purposes of caching. That means they are not part of the
 //! hash table key and thus should never influence the output of the function. It can be useful for diagnostic settings,
@@ -64,7 +56,7 @@
 //!
 //! ### Example:
 //! ```rust
-//! use lru_cache_macros::cache;
+//! use cache_macro::cache;
 //! use lru_cache::LruCache;
 //! #[cache(LruCache : LruCache::new(20))]
 //! #[cache_cfg(ignore_args = call_count)]
@@ -84,7 +76,7 @@
 //!
 //! The `call_count` argument can vary, caching is only done based on `x`.
 //!
-//! * `#[lru_config(thread_local)]`
+//! * `#[cache_cfg(thread_local)]`
 //!
 //! Store the cache in thread-local storage instead of global static storage. This avoids the overhead of Mutex locking,
 //! but each thread will be given its own cache, and all caching will not affect any other thread.
@@ -92,7 +84,7 @@
 //! Expanding on the first example:
 //!
 //! ```rust
-//! use lru_cache_macros::cache;
+//! use cache_macro::cache;
 //! use lru_cache::LruCache;
 //!
 //! #[cache(LruCache : LruCache::new(20))]
@@ -110,8 +102,8 @@
 //! ```
 //!
 //! # Details
-//! The created cache is stored as a static variable protected by a mutex unless the `#[lru_config(thread_local)]` configuration
-//! is added.
+//! The created cache is stored as a static variable protected by a mutex unless the `#[cache_cfg(thread_local)]`
+//! configuration is added.
 //!
 //! With the default settings, the fibonacci example will generate the following code:
 //!
