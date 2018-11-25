@@ -418,13 +418,6 @@ fn get_args_and_types(f: &syn::ItemFn, config: &config::Config) ->
                 let arg_name;
                 if let syn::Pat::Ident(ref pat_ident) = arg_captured.pat {
                     arg_name = pat_ident.ident.clone();
-                    if let Some(m) = pat_ident.mutability {
-                        if !config.ignore_args.contains(&arg_name) {
-                            let diag = m.span.unstable()
-                                .error("`mut` arguments are not supported with lru_cache as this could lead to incorrect results being stored");
-                            return Err(DiagnosticError::new(diag));
-                        }
-                    }
                     segments.push(syn::PathSegment { ident: pat_ident.ident.clone(), arguments: syn::PathArguments::None });
                 } else {
                     let diag = arg_captured.span().unstable()
@@ -438,6 +431,11 @@ fn get_args_and_types(f: &syn::ItemFn, config: &config::Config) ->
 
                     // If the arg type is a reference, remove the reference because the arg will be cloned
                     if let syn::Type::Reference(type_reference) = &arg_captured.ty {
+                        if let Some(m) = type_reference.mutability {
+                            let diag = m.span.unstable()
+                                .error("`mut` reference arguments are not supported as this could lead to incorrect results being stored");
+                            return Err(DiagnosticError::new(diag));
+                        }
                         types.push(type_reference.elem.as_ref().to_owned()); // as_ref -> to_owned unboxes the type
                     } else {
                         types.push(arg_captured.ty.clone());
