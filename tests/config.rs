@@ -1,6 +1,7 @@
 use lru_cache_macros::lru_cache;
 use std::thread;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time;
 
 #[test]
 fn thread_local_ignore_args() {
@@ -39,18 +40,16 @@ fn multithreaded() {
         assert_eq!(fib(39), 102_334_155);
     });
 
-    let t2 = thread::spawn( || {
-        assert_eq!(fib(39), 102_334_155);
-    });
+    let ten_millis = time::Duration::from_millis(10);
+    thread::sleep(ten_millis);
 
-    let t3 = thread::spawn( || {
+    let t2 = thread::spawn( || {
         assert_eq!(fib(39), 102_334_155);
     });
 
     t1.join().unwrap();
     t2.join().unwrap();
-    t3.join().unwrap();
 
-    // threads should share a cache, so total runs should be less than 40 * 3
-    assert!(CALL_COUNT.load(Ordering::SeqCst) < 120);
+    // threads should share a cache, so total runs should be less than 40 * 2
+    assert!(CALL_COUNT.load(Ordering::SeqCst) < 80);
 }

@@ -177,8 +177,6 @@
 #![recursion_limit="128"]
 extern crate proc_macro;
 
-use std::result;
-
 use proc_macro::TokenStream;
 use syn;
 use syn::{Token, parse_quote};
@@ -224,7 +222,6 @@ fn lru_cache_impl(attr: TokenStream, item: TokenStream) -> Result<TokenStream> {
 
     let mut new_fn = original_fn.clone();
 
-    let cache_size = get_lru_size(attr)?;
     let return_type = get_cache_fn_return_type(&original_fn)?;
 
     let new_name = format!("__lru_base_{}", original_fn.ident.to_string());
@@ -251,8 +248,9 @@ fn lru_cache_impl(attr: TokenStream, item: TokenStream) -> Result<TokenStream> {
     let cache_type_with_generics: syn::Type = parse_quote! {
         #cache_type<#tuple_type, #return_type>
     };
+    let new_args = syn::parse::<syn::Expr>(attr).unwrap();
     let cache_new: syn::Expr = parse_quote! {
-        #cache_type::new(#cache_size)
+        #cache_type::new(#new_args)
     };
 
     let lru_body = build_cache_body(&cache_type_with_generics, &cache_new, &cloned_args,
@@ -361,18 +359,6 @@ fn path_from_ident(ident: syn::Ident) -> syn::Expr {
     let mut segments: Punctuated<_, Token![::]> = Punctuated::new();
     segments.push(syn::PathSegment { ident: ident, arguments: syn::PathArguments::None });
     syn::Expr::Path(syn::ExprPath { attrs: Vec::new(), qself: None, path: syn::Path { leading_colon: None, segments: segments} })
-}
-
-fn get_lru_size(attr: TokenStream) -> Result<usize> {
-    let value: result::Result<syn::LitInt, _> = syn::parse(attr.clone());
-
-    if let Ok(val) = value {
-        Ok(val.value() as usize)
-    } else {
-        let diag = proc_macro2::Span::call_site().unstable()
-            .error("The lru_cache macro must specify a maximum cache size as an argument");
-        Err(DiagnosticError::new_with_syn_error(diag, value.err().unwrap()))
-    }
 }
 
 fn make_cloned_args_tuple(args: &Punctuated<syn::Expr, Token![,]>) -> syn::ExprTuple {
