@@ -143,26 +143,30 @@
 //!     if x <= 1 { 1 } else { fib(x - 1) + fib(x - 2) }
 //! }
 //! fn fib(x: u32) -> u64 {
-//!     use std::cell::UnsafeCell;
+//!     use std::cell::RefCell;
 //!     use std::thread_local;
 //!
 //!     thread_local!(
-//!          static cache: UnsafeCell<::lru_cache::LruCache<(u32,), u64>> =
-//!              UnsafeCell::new(::lru_cache::LruCache::new(20usize));
+//!         static cache: RefCell<::lru_cache::LruCache<(u32,), u64>> =
+//!             RefCell::new(::lru_cache::LruCache::new(20usize));
 //!     );
 //!
 //!     cache.with(|c|
 //!         {
-//!             let mut cache_ref = unsafe { &mut *c.get() };
+//!             let mut cache_ref = c.borrow_mut();
 //!             let cloned_args = (x.clone(),);
 //!             let stored_result = cache_ref.get_mut(&cloned_args);
 //!             if let Some(stored_result) = stored_result {
-//!                 stored_result.clone()
-//!             } else {
-//!                 let ret = __lru_base_fib(x);
-//!                 cache_ref.insert(cloned_args, ret.clone());
-//!                 ret
+//!                 return stored_result.clone()
 //!             }
+//!
+//!             // Don't hold a mutable borrow across
+//!             // the recursive function call
+//!             drop(cache_ref);
+//!
+//!             let ret = __lru_base_fib(x);
+//!             c.borrow_mut().insert(cloned_args, ret.clone());
+//!             ret
 //!         })
 //! }
 //! ```
